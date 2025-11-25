@@ -81,7 +81,7 @@ time = tic;
 if verbose, fprintf('Image acquisition started ... \n'),end
 
 % this function is quite large. Should be broken up into smaller pieces.
-[IMG, wait, frameid, fh,tstack,exptVars] = readInitialBatch(inputParams,batchSettings,exptVars);
+[IMG, wait, frameid, fh, tstack, exptVars] = readInitialBatch(inputParams, batchSettings, exptVars);
 
 if wait == 10000
     promptMessage = sprintf('Number of acquired images is insufficient to achieve the specified size of the initial batch');
@@ -94,7 +94,7 @@ if verbose, fprintf('Initial aquisition took %.4f seconds\n',aquisitionTime), en
 
 % Motion correction should  be independent of most experimental variables.
 % We should adapt the inputs for this function to be reused outside of neuroart.
-[regImg,imTemplate,norm_meanRedIMG] = motionCorrection(IMG,exptVars,inputParams,batchSettings);
+[regImg, imTemplate, norm_meanRedIMG] = motionCorrection(IMG, exptVars, inputParams, batchSettings);
 
 % Mean image and normalized mean image for cell center clicking and GUI:
 meanIMG = mean(double(regImg),3); 
@@ -109,6 +109,11 @@ if verbose, fprintf('Registration took %.4f seconds\n',registrationTime - aquisi
 detectCentroidsOfCells;
 %%
 close(gcf);
+
+%%% NEW: ensure cell_masks exists for all CFIND modes
+if ~exist('cell_masks','var')
+    cell_masks = [];    % no masks for manual / CaImAn / file / Cite-on, etc.
+end
 
 numCells = length(cell_centroids);
 segmentationTime = toc(time);
@@ -130,9 +135,13 @@ neuropilSubPercent = 70; % use this default value for now (not needed for filled
 exptVars.scope = inputParams.SCOPE; % needed for DF/F calculation depending on the requirement (one sided window for real-time: SCOPE 1 to 5, symmetric window for offline mode: SCOPE == 6)  
 
 if inputParams.ROI == 1 % no filled ROIs
-    [norm_meanIMG,roiBW2,npBWout,DFF,~,fluoAllSmooth,xcRaw,ycRaw,minNpSubFluo,maxAdjF] = computeDFF_new_coder(regImg,exptVars.frameRate,cell_centroids,exptVars.rPixels,floor(exptVars.dffWindow/2),inputParams.fluorPercentile,neuropilSubPercent);   
+    [norm_meanIMG, roiBW2, npBWout, DFF, ~, fluoAllSmooth, xcRaw, ycRaw, minNpSubFluo, maxAdjF] = ...
+        computeDFF_new_coder(regImg, exptVars.frameRate, cell_centroids, exptVars.rPixels, ...
+                             floor(exptVars.dffWindow/2), inputParams.fluorPercentile, neuropilSubPercent);   
 else
-    [norm_meanIMG,roiBW2,npBWout,DFF,~,fluoAllSmooth,xcRaw,ycRaw,minNpSubFluo,maxAdjF] = computeDFF_filled(regImg,exptVars,cell_centroids(:,2),cell_centroids(:,1),exptVars.rPixels,floor(exptVars.dffWindow/2),inputParams.fluorPercentile); 
+    [norm_meanIMG, roiBW2, npBWout, DFF, ~, fluoAllSmooth, xcRaw, ycRaw, minNpSubFluo, maxAdjF] = ...
+        computeDFF_filled(regImg, exptVars, cell_centroids(:,2), cell_centroids(:,1), ...
+                          exptVars.rPixels, floor(exptVars.dffWindow/2), inputParams.fluorPercentile); 
 end
 
 computedffTime = toc(time);
@@ -184,6 +193,7 @@ RTparams.roiBW2 = roiBW2;
 RTparams.xcRaw = xcRaw;
 RTparams.ycRaw = ycRaw;
 RTparams.norm_meanIMG = norm_meanIMG;
+RTparams.cell_masks = cell_masks;   %%%% NEW: give realTimeApp access to label masks
 RTparams.symmFLAG = inputParams.symmFlag;
 RTparams.smoothwin = inputParams.smoothWin;
 RTparams.filled = (inputParams.ROI == 2); % true if the image consists of filled ROIs
