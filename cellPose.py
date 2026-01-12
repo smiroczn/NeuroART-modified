@@ -1,4 +1,3 @@
-
 from cellpose import models, io, plot
 import numpy as np
 import pandas as pd
@@ -6,22 +5,31 @@ from scipy.ndimage import center_of_mass
 from scipy.io import loadmat
 import tifffile
 import argparse
+import torch  # For GPU detection
 
 
 def segment(calcium_image):
     CHANNELS = [0, 0]
-    model = models.Cellpose(gpu=True, model_type='cyto3')
+    
+    # Auto-detect GPU availability
+    use_gpu = torch.cuda.is_available()
+    if use_gpu:
+        print("GPU detected - using CUDA acceleration")
+    else:
+        print("No GPU detected - using CPU")
+    
+    model = models.CellposeModel(gpu=use_gpu, model_type='cyto3')
 
     # Use mean image across time for segmentation
     mean_img = calcium_image.mean(axis=0)
 
     # If your image has channels as the last axis (H x W x C), channel_axis=2 is correct.
     # If it's just H x W (single-channel), you can set channel_axis=None instead.
-    masks, flows, styles, diams = model.eval(
+    masks, flows, styles = model.eval(
         [mean_img],
-        diameter=0,
+        diameter=None,
         channels=CHANNELS,
-        channel_axis=2
+        channel_axis=None
     )
 
     # masks is a list (one per input image); take the first
@@ -47,11 +55,12 @@ with tifffile.TiffFile(image_path) as tif:
 # --- Run Cellpose segmentation ---
 masks = segment(calcium_image)
 
-# === NEW BLOCK: save full label masks ===
+# === Save full label masks ===
 # Save the 2D label image (each integer label = one cell, 0 = background)
 tifffile.imwrite('masks.tif', masks.astype('uint16'))
+print(f"Saved masks with {masks.max()} cells detected")
 
-# --- Compute centroids from masks (unchanged) ---
+# --- Compute centroids from masks ---
 labels = np.unique(masks)        # Get unique labels for masks
 labels = labels[labels > 0]      # Exclude background (label 0)
 
@@ -62,3 +71,6 @@ for label in labels:
 
 centroids_df = pd.DataFrame(centroids, columns=['Y', 'X'])
 centroids_df.to_csv('centroids.csv', index=False)  # Save centroids to CSV
+print(f"Saved {len(centroids)} centroids to centroids.csv")
+
+
